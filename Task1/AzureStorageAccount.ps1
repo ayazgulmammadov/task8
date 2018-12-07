@@ -21,4 +21,4 @@ Set-AzureRmCurrentStorageAccount -ResourceGroupName $ResGroup -Name $StorageAcco
 New-AzureStorageContainer -Name $ContainerName -Permission Off
 
 # Upload files into a container
-Get-ChildItem -File $FilesToUpload -Recurse | Set-AzureStorageBlobContent -Container $ContainerName 
+Get-ChildItem -File $FilesToUpload -Recurse | Set-AzureStorageBlobContent -Container $ContainerName

@@ -1,5 +1,4 @@
 ﻿param(
-    [Parameter(Mandatory)][string]$SubscriptionName,
     [Parameter(Mandatory)][string]$StorageAccountName,
     [Parameter(Mandatory)][string]$ResGroup,
     [Parameter(Mandatory)][string]$Location,

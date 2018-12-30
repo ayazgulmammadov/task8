@@ -39,16 +39,15 @@ foreach($sqlserver in $sqlserverNames){
         -ResourceGroupName $resgroupName `
         -ServerName $sqlserver `
         -Location $location `
-        -SqlAdministratorCredentials $cred
-}
+        -SqlAdministratorCredentials $cred}
+
 foreach($sqlserver in $sqlserverNames){
     New-AzureRmSqlServerFirewallRule `
         -FirewallRuleName 'AllowedIPs' `
         -ServerName $sqlserver `
         -ResourceGroupName $resgroupName `
         -StartIpAddress $startIP `
-        -EndIpAddress $endIP
-}
+        -EndIpAddress $endIP}
 
 #create 3 databases on the 1st sql server
 for($i=0; $i -le 2; $i ++){

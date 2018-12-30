@@ -1,16 +1,12 @@
 ﻿param(
-    [Parameter(Mandatory)][string]$ctxFilePath,
+    #[Parameter(Mandatory)][string]$ctxFilePath,
     [Parameter(Mandatory)][string]$username,
     [Parameter(Mandatory)][securestring]$password,
     [Parameter(Mandatory)][string]$resgroupName,
     [Parameter(Mandatory)][string]$location,
     [Parameter(Mandatory)][string]$storageName,
-    [Parameter(Mandatory)][string]$sql1Name,
-    [Parameter(Mandatory)][string]$sql2Name,
-    [Parameter(Mandatory)][string]$db01,
-    [Parameter(Mandatory)][string]$db02,
-    [Parameter(Mandatory)][string]$db03,
-    [Parameter(Mandatory)][string]$sql2dbName,
+    [Parameter(Mandatory)][ValidateCount(2,2)][string[]]$sqlserverNames,
+    [Parameter(Mandatory)][ValidateCount(4,4)][string[]]$databaseNames,
     [Parameter(Mandatory)][string]$startIP,
     [Parameter(Mandatory)][string]$endIP
     )
@@ -37,66 +33,54 @@ $container = New-AzureStorageContainer -Name "sqlbackup" -Permission Container
 $bacpacURI = $container.CloudBlobContainer.Uri.AbsoluteUri + "/dbbackup.bacpac"
 $storageKey = (Get-AzureRmStorageAccountKey -ResourceGroupName $resgroupName -Name $storagename).Value[0]
 
-#create new azure sql server and firewall rule
-New-AzureRmSqlServer `
-    -ResourceGroupName $resgroupName `
-    -ServerName $sql1Name `
-    -Location $location `
-    -SqlAdministratorCredentials $cred
+#create 2 azure sql servers and firewall rules for each of them
+foreach($sqlserver in $sqlserverNames){
+    New-AzureRmSqlServer `
+        -ResourceGroupName $resgroupName `
+        -ServerName $sqlserver `
+        -Location $location `
+        -SqlAdministratorCredentials $cred
+}
+foreach($sqlserver in $sqlserverNames){
+    New-AzureRmSqlServerFirewallRule `
+        -FirewallRuleName 'AllowedIPs' `
+        -ServerName $sqlserver `
+        -ResourceGroupName $resgroupName `
+        -StartIpAddress $startIP `
+        -EndIpAddress $endIP
+}
 
-New-AzureRmSqlServerFirewallRule `
-    -FirewallRuleName 'AllowedIPs' `
-    -ServerName $sql1Name `
-    -ResourceGroupName $resgroupName `
-    -StartIpAddress $startIP `
-    -EndIpAddress $endIP
-
-#create 3 databases on the sql server
-$databases = @($db01,$db02,$db03)
-foreach($database in $databases){
+#create 3 databases on the 1st sql server
+for($i=0; $i -le 2; $i ++){
     New-AzureRmSqlDatabase `
         -ResourceGroupName $resgroupName `
-        -ServerName $sql1Name `
-        -DatabaseName $database `
-        -RequestedServiceObjectiveName 'S0'}
+        -ServerName $sqlserverNames[0] `
+        -DatabaseName $databaseNames[$i] `
+        -RequestedServiceObjectiveName 'S0'} 
+
+#create 1 database on the 2nd sql server
+New-AzureRmSqlDatabase `
+    -ResourceGroupName $resgroupName `
+    -ServerName $sqlserverNames[1] `
+    -DatabaseName $databaseNames[3] `
+    -RequestedServiceObjectiveName 'S0'
 
 #export sql db backup to azure storage container
 New-AzureRmSqlDatabaseExport `
     -ResourceGroupName $resgroupName `
-    -ServerName $sql1Name `
-    -DatabaseName $db01 `
+    -ServerName $sqlserverNames[0] `
+    -DatabaseName $databaseNames[0] `
     -StorageKeyType StorageAccessKey `
     -StorageKey $storageKey `
     -StorageUri $bacpacURI `
     -AdministratorLogin $cred.UserName `
     -AdministratorLoginPassword $cred.Password 
-
-#create another sql server and database with the same credentials in the same resourse group
-New-AzureRmSqlServer `
-    -ResourceGroupName $resgroupName `
-    -ServerName $sql2Name `
-    -Location $location `
-    -SqlAdministratorCredentials $cred
-
-New-AzureRmSqlDatabase `
-    -ResourceGroupName $resgroupName `
-    -DatabaseName $sql2dbName `
-    -ServerName $sql2Name `
-    -RequestedServiceObjectiveName 'S0' 
-
-#create firewall rule for second sql server
-New-AzureRmSqlServerFirewallRule `
-    -FirewallRuleName 'AllowedIPs' `
-    -ServerName $sql2Name `
-    -ResourceGroupName $resgroupName `
-    -StartIpAddress $startIP `
-    -EndIpAddress $endIP
-    
-#Import sql backup to antoher Azure SQL server
+   
+#import sql backup to the 2nd sql server
 New-AzureRmSqlDatabaseImport `
     -ResourceGroupName $resgroupName `
-    -ServerName $sql2Name `
-    -DatabaseName $sql2dbName `
+    -ServerName $sqlserverNames[1] `
+    -DatabaseName $databaseNames[3] `
     -ServiceObjectiveName 'S0' `
     -StorageKeyType StorageAccessKey `
     -StorageKey $storageKey `

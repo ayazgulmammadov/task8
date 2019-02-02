@@ -1,0 +1,283 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "mystrgType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "myVmName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "myVmAdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "myVmAdminPassword": {
+      "type": "securestring"
+    },
+    "myVmWindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2016-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "2016-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "folder": {
+      "type": "string",
+      "metadata": {
+        "description": "folder path in custom script"
+      }
+    },
+    "file": {
+      "type": "string",
+      "metadata": {
+        "description": "file name in custom script"
+      }
+    },
+    "mypblcipDnsName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Auto-generated container in staging storage account to receive post-build staging folder upload"
+      }
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Auto-generated token to access _artifactsLocation"
+      }
+    }},
+  "variables": {
+    "mystrgName": "[concat('mystrg', uniqueString(resourceGroup().id))]",
+    "myVnetPrefix": "10.0.0.0/16",
+    "myVnetSubnet1Name": "Subnet-1",
+    "myVnetSubnet1Prefix": "10.0.0.0/24",
+    "myVnetSubnet2Name": "Subnet-2",
+    "myVnetSubnet2Prefix": "10.0.1.0/24",
+    "myVmImagePublisher": "MicrosoftWindowsServer",
+    "myVmImageOffer": "WindowsServer",
+    "myVmOSDiskName": "myVmOSDisk",
+    "myVmVmSize": "Standard_D2_v2",
+    "myVmVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'myVnet')]",
+    "myVmSubnetRef": "[concat(variables('myVmVnetID'), '/subnets/', variables('myVnetSubnet1Name'))]",
+    "myVmStorageAccountContainerName": "vhds",
+    "myVmNicName": "[concat(parameters('myVmName'), 'NetworkInterface')]",
+    "mypblcipName": "mypblcip",
+    "DSCconfigArchiveFolder": "DSC",
+    "DSCconfigArchiveFileName": "DSCconfig.zip",
+    "customScriptScriptFolder": "CustomScripts",
+    "customScriptScriptFileName": "customScript.ps1"},
+  "resources": [
+    {
+      "name": "[variables('mystrgName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-01-01",
+      "sku": {
+        "name": "[parameters('mystrgType')]"
+      },
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "mystrg"
+      },
+      "kind": "Storage"
+    },
+    {
+      "name": "myVnet",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "myVnet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('myVnetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('myVnetSubnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('myVnetSubnet1Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('myVnetSubnet2Name')]",
+            "properties": {
+              "addressPrefix": "[variables('myVnetSubnet2Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('myVmNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'myVnet')]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('mypblcipName'))]"
+      ],
+      "tags": {
+        "displayName": "myVmNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('myVmSubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('mypblcipName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('myVmName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('mystrgName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('myVmNicName'))]"
+      ],
+      "tags": {
+        "displayName": "myVm"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('myVmVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('myVmName')]",
+          "adminUsername": "[parameters('myVmAdminUsername')]",
+          "adminPassword": "[parameters('myVmAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('myVmImagePublisher')]",
+            "offer": "[variables('myVmImageOffer')]",
+            "sku": "[parameters('myVmWindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "myVmOSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('mystrgName')), '2016-01-01').primaryEndpoints.blob, variables('myVmStorageAccountContainerName'), '/', variables('myVmOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('myVmNicName'))]"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "Microsoft.Powershell.DSC",
+          "type": "extensions",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2016-03-30",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', parameters('myVmName'))]"
+          ],
+          "tags": {
+            "displayName": "DSCconfig"
+          },
+          "properties": {
+            "publisher": "Microsoft.Powershell",
+            "type": "DSC",
+            "typeHandlerVersion": "2.9",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "configuration": {
+                "url": "[concat(parameters('_artifactsLocation'), '/', variables('DSCconfigArchiveFolder'), '/', variables('DSCconfigArchiveFileName'))]",
+                "script": "DSCconfig.ps1",
+                "function": "Main"
+              },
+              "configurationArguments": {
+                "nodeName": "[parameters('myVmName')]",
+                "script2Uri": "[concat(parameters('_artifactsLocation'), '/', 'Scripts', '/', 'script2.ps1', parameters('_artifactsLocationSasToken'))]"
+              }
+            },
+            "protectedSettings": {
+              "configurationUrlSasToken": "[parameters('_artifactsLocationSasToken')]"
+            }
+          }
+        },
+        {
+          "name": "customScript",
+          "type": "extensions",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2016-03-30",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', parameters('myVmName'))]",
+            "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('myVmName'), 'Microsoft.Powershell.DSC')]"
+          ],
+          "tags": {
+            "displayName": "customScript"
+          },
+          "properties": {
+            "publisher": "Microsoft.Compute",
+            "type": "CustomScriptExtension",
+            "typeHandlerVersion": "1.4",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "fileUris": [
+                "[concat(parameters('_artifactsLocation'), '/', variables('customScriptScriptFolder'), '/', variables('customScriptScriptFileName'), parameters('_artifactsLocationSasToken'))]"
+              ],
+              "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File ', variables('customScriptScriptFolder'), '/', variables('customScriptScriptFileName'), ' -folder ', parameters('folder'), ' -file ', parameters('file'))]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "[variables('mypblcipName')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "mypblcip"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('mypblcipDnsName')]"
+        }
+      }
+    }],
+  "outputs": {}
+}

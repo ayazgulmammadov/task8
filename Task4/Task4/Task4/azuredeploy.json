@@ -1,0 +1,251 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "mystrgaccType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "mywinVmName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mywinVmAdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mywinVmAdminPassword": {
+      "type": "securestring"
+    },
+    "mywinVmWindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2016-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "2016-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "fileName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of file which will be copied to deployed VM via DSC"
+      }
+    },
+    "mypblcIPDnsName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Auto-generated container in staging storage account to receive post-build staging folder upload"
+      }
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Auto-generated token to access _artifactsLocation"
+      }
+    }},
+  "variables": {
+    "mystrgaccName": "[concat('mystrgacc', uniqueString(resourceGroup().id))]",
+    "myVnetPrefix": "10.0.0.0/16",
+    "myVnetSubnet1Name": "Subnet-1",
+    "myVnetSubnet1Prefix": "10.0.0.0/24",
+    "myVnetSubnet2Name": "Subnet-2",
+    "myVnetSubnet2Prefix": "10.0.1.0/24",
+    "mywinVmImagePublisher": "MicrosoftWindowsServer",
+    "mywinVmImageOffer": "WindowsServer",
+    "mywinVmOSDiskName": "mywinVmOSDisk",
+    "mywinVmVmSize": "Standard_D2_v2",
+    "mywinVmVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'myVnet')]",
+    "mywinVmSubnetRef": "[concat(variables('mywinVmVnetID'), '/subnets/', variables('myVnetSubnet1Name'))]",
+    "mywinVmStorageAccountContainerName": "vhds",
+    "mywinVmNicName": "[concat(parameters('mywinVmName'), 'NetworkInterface')]",
+    "mypblcIPName": "mypblcIP",
+    "mydscConfArchiveFolder": "DSC",
+    "mydscConfArchiveFileName": "mydscConf.zip"},
+  "resources": [
+    {
+      "name": "[variables('mystrgaccName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-01-01",
+      "sku": {
+        "name": "[parameters('mystrgaccType')]"
+      },
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "mystrgacc"
+      },
+      "kind": "Storage"
+    },
+    {
+      "name": "myVnet",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "myVnet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('myVnetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('myVnetSubnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('myVnetSubnet1Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('myVnetSubnet2Name')]",
+            "properties": {
+              "addressPrefix": "[variables('myVnetSubnet2Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('mywinVmNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'myVnet')]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('mypblcIPName'))]"
+      ],
+      "tags": {
+        "displayName": "mywinVmNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('mywinVmSubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('mypblcIPName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('mywinVmName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('mystrgaccName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('mywinVmNicName'))]"
+      ],
+      "tags": {
+        "displayName": "mywinVm"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('mywinVmVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('mywinVmName')]",
+          "adminUsername": "[parameters('mywinVmAdminUsername')]",
+          "adminPassword": "[parameters('mywinVmAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('mywinVmImagePublisher')]",
+            "offer": "[variables('mywinVmImageOffer')]",
+            "sku": "[parameters('mywinVmWindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "mywinVmOSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('mystrgaccName')), '2016-01-01').primaryEndpoints.blob, variables('mywinVmStorageAccountContainerName'), '/', variables('mywinVmOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('mywinVmNicName'))]"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "Microsoft.Powershell.DSC",
+          "type": "extensions",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2016-03-30",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', parameters('mywinVmName'))]"
+          ],
+          "tags": {
+            "displayName": "mydscConf"
+          },
+          "properties": {
+            "publisher": "Microsoft.Powershell",
+            "type": "DSC",
+            "typeHandlerVersion": "2.9",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "configuration": {
+                "url": "[concat(parameters('_artifactsLocation'), '/', variables('mydscConfArchiveFolder'), '/', variables('mydscConfArchiveFileName'))]",
+                "script": "mydscConf.ps1",
+                "function": "Main"
+              },
+              "configurationArguments": {
+                "nodeName": "[parameters('mywinVmName')]",
+                "fileUri": "[concat(parameters('_artifactsLocation'), '/', 'Scripts', '/', parameters('fileName'), parameters('_artifactsLocationSasToken'))]",
+                "fileName": "[parameters('fileName')]"
+              }
+            },
+            "protectedSettings": {
+              "configurationUrlSasToken": "[parameters('_artifactsLocationSasToken')]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "[variables('mypblcIPName')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "mypblcIP"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('mypblcIPDnsName')]"
+        }
+      }
+    }],
+  "outputs": {}
+}

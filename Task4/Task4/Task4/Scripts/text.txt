@@ -1,0 +1,1 @@
+This file has been copied from the desktop machine to this vm by DSC config.

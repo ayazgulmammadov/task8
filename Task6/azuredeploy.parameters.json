@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "myVMName": {"value": "ayazsrv2019"},
+    "myVMAdminUserName": {"value": "ayazadm"},
+    "myVMAdminPassword": {"value": "A123456789a!"},
+    "mypblcIPDnsName": {"value": "ayazsrv2019"}
+  }
+}

@@ -15,7 +15,6 @@ Configuration Main
         WindowsFeature IIS {
             Ensure = "Present"
             Name   = "Web-Server"
-            
         }
         File certFolder {
             Ensure          = "Present"
@@ -69,7 +68,6 @@ Configuration Main
         }
         Script installCert {
             TestScript = {
-                #$cert = "C:\Cert\azureiis.pfx"
                 if((Get-ChildItem Cert:\LocalMachine\WebHosting).Thumbprint -contains "9592668eb21d646184b1dc889c7f1acaf3c0a857"){return $true}
                 else{return $false}
                 }
@@ -82,7 +80,7 @@ Configuration Main
                 $certs = Get-ChildItem -Path Cert:\LocalMachine\WebHosting -Recurse
                 return @{result = $certs.Thumbprint}
                 }
-                DependsOn = @("[File]certFolder","[xRemoteFile]copyCert")
+                DependsOn = "[xRemoteFile]copyCert"
         }
     }
 }

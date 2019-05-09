@@ -1,0 +1,481 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "secondResGroupName": {
+      "type": "string"
+    },
+    "vm-01Name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "vm-02Name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "vm-01AdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "vm-01AdminPassword": {
+      "type": "securestring"
+    },
+    "vm-02AdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "vm-02AdminPassword": {
+      "type": "securestring"
+    },
+    "vm-01WindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2016-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "2016-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "vm-02WindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2016-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "2016-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "publicip-01DnsName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "publicip-02DnsName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Auto-generated container in staging storage account to receive post-build staging folder upload"
+      }
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Auto-generated token to access _artifactsLocation"
+      }
+    }
+  },
+  "variables": {
+    "VNet-01-Prefix": "10.0.0.0/16",
+    "VNet-01-SubnetName": "Subnet-1",
+    "VNet-01-SubnetPrefix": "10.0.0.0/24",
+    "VNet-02-Prefix": "192.168.0.0/16",
+    "VNet-02-SubnetName": "Subnet-1",
+    "VNet-02-SubnetPrefix": "192.168.0.0/24",
+    "vm-01ImagePublisher": "MicrosoftWindowsServer",
+    "vm-02ImagePublisher": "MicrosoftWindowsServer",
+    "vm-01ImageOffer": "WindowsServer",
+    "vm-02ImageOffer": "WindowsServer",
+    "vm-01VmSize": "Standard_D2_v2",
+    "vm-02VmSize": "Standard_D2_v2",
+    "vm-01VnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'VNet-01')]",
+    "vm-02VnetID": "[resourceId(parameters('secondResGroupName'), 'Microsoft.Network/virtualNetworks', 'VNet-02')]",
+    "vm-01SubnetRef": "[concat(variables('vm-01VnetID'), '/subnets/', variables('VNet-01-SubnetName'))]",
+    "vm-02SubnetRef": "[concat(variables('vm-02VnetID'), '/subnets/', variables('VNet-02-SubnetName'))]",
+    "vm-01NicName": "[concat(parameters('vm-01Name'), 'NIC')]",
+    "vm-02NicName": "[concat(parameters('vm-02Name'), 'NIC')]",
+    "publicip-01Name": "publicip-01",
+    "publicip-02Name": "publicip-02",
+    "DSCconfigArchiveFolder": "DSC",
+    "vm01configArchiveFileName": "vm01config.zip",
+    "vm02configArchiveFileName": "vm02config.zip"
+  },
+  "resources": [
+    {
+      "name": "nestedTemplate",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2018-11-01",
+      "resourceGroup": "[parameters('secondResGroupName')]",
+      "dependsOn": [],
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "variables": {},
+          "resources": [
+            {
+              "name": "NSG-02",
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "location": "[resourceGroup().location]",
+              "apiVersion": "2018-11-01",
+              "dependsOn": [],
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "AllowVNetInbound",
+                    "properties": {
+                      "access": "Allow",
+                      "description": "Allow inbound traffic from VNet",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "VirtualNetwork",
+                      "destinationPortRange": "*",
+                      "protocol": "*",
+                      "direction": "Inbound",
+                      "priority": 100
+                    }
+                  },
+                  {
+                    "name": "BlockAllInbound",
+                    "properties": {
+                      "access": "Deny",
+                      "description": "Deny all inbound traffic",
+                      "sourceAddressPrefix": "*",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "*",
+                      "protocol": "*",
+                      "direction": "Inbound",
+                      "priority": 101
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "VNet-02",
+              "type": "Microsoft.Network/virtualNetworks",
+              "location": "[resourceGroup().location]",
+              "apiVersion": "2018-10-01",
+              "dependsOn": [
+                "NSG-02"
+              ],
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[variables('VNet-02-Prefix')]"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "[variables('VNet-02-SubnetName')]",
+                    "properties": {
+                      "addressPrefix": "[variables('VNet-02-SubnetPrefix')]",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId(parameters('secondResGroupName'), 'Microsoft.Network/networkSecurityGroups', 'NSG-02')]"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "[variables('vm-02NicName')]",
+              "type": "Microsoft.Network/networkInterfaces",
+              "location": "[resourceGroup().location]",
+              "apiVersion": "2016-03-30",
+              "dependsOn": [
+                "VNet-02",
+                "[variables('publicip-02Name')]"
+              ],
+              "properties": {
+                "ipConfigurations": [
+                  {
+                    "name": "ipconfig1",
+                    "properties": {
+                      "privateIPAllocationMethod": "Static",
+                      "privateIPAddress": "192.168.0.4",
+                      "subnet": {
+                        "id": "[variables('vm-02SubnetRef')]"
+                      },
+                      "publicIPAddress": {
+                        "id": "[resourceId(parameters('secondResGroupName'), 'Microsoft.Network/publicIPAddresses', variables('publicip-02Name'))]"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "[parameters('vm-02Name')]",
+              "type": "Microsoft.Compute/virtualMachines",
+              "location": "[resourceGroup().location]",
+              "apiVersion": "2018-10-01",
+              "dependsOn": [
+                "[variables('vm-02NicName')]"
+              ],
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "[variables('vm-02VmSize')]"
+                },
+                "osProfile": {
+                  "computerName": "[parameters('vm-02Name')]",
+                  "adminUsername": "[parameters('vm-02AdminUsername')]",
+                  "adminPassword": "[parameters('vm-02AdminPassword')]"
+                },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "[variables('vm-02ImagePublisher')]",
+                    "offer": "[variables('vm-02ImageOffer')]",
+                    "sku": "[parameters('vm-02WindowsOSVersion')]",
+                    "version": "latest"
+                  },
+                  "osDisk": {
+                    "name": "vm-02OSDisk",
+                    "managedDisk": {
+                      "storageAccountType": "Standard_LRS"
+                    },
+                    "caching": "ReadWrite",
+                    "createOption": "FromImage"
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId(parameters('secondResGroupName'), 'Microsoft.Network/networkInterfaces', variables('vm-02NicName'))]"
+                    }
+                  ]
+                }
+              },
+              "resources": [
+                {
+                  "name": "Microsoft.Powershell.DSC",
+                  "type": "extensions",
+                  "location": "[resourceGroup().location]",
+                  "apiVersion": "2016-03-30",
+                  "dependsOn": [
+                    "[resourceId(parameters('secondResGroupName'), 'Microsoft.Compute/virtualMachines', parameters('vm-02Name'))]"
+                  ],
+                  "properties": {
+                    "publisher": "Microsoft.Powershell",
+                    "type": "DSC",
+                    "typeHandlerVersion": "2.9",
+                    "autoUpgradeMinorVersion": true,
+                    "settings": {
+                      "configuration": {
+                        "url": "[concat(parameters('_artifactsLocation'), '/', variables('DSCconfigArchiveFolder'), '/', variables('vm02configArchiveFileName'))]",
+                        "script": "vm02config.ps1",
+                        "function": "Main"
+                      },
+                      "configurationArguments": {
+                        "nodeName": "[parameters('vm-02Name')]"
+                      }
+                    },
+                    "protectedSettings": {
+                      "configurationUrlSasToken": "[parameters('_artifactsLocationSasToken')]"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[variables('publicip-02Name')]",
+              "type": "Microsoft.Network/publicIPAddresses",
+              "location": "[resourceGroup().location]",
+              "apiVersion": "2016-03-30",
+              "dependsOn": [],
+              "properties": {
+                "publicIPAllocationMethod": "Dynamic",
+                "dnsSettings": {
+                  "domainNameLabel": "[parameters('publicip-02DnsName')]"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "NSG-01",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2018-11-01",
+      "dependsOn": [],
+      "properties": {
+        "securityRules": [
+          {
+            "name": "AllowVNetInbound",
+            "properties": {
+              "access": "Allow",
+              "description": "Allow inbound traffic from VNet",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "destinationPortRange": "*",
+              "protocol": "*",
+              "direction": "Inbound",
+              "priority": 100
+            }
+          },
+          {
+            "name": "BlockAllInbound",
+            "properties": {
+              "access": "Deny",
+              "description": "Deny all inbound traffic",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "*",
+              "protocol": "*",
+              "direction": "Inbound",
+              "priority": 101
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "VNet-01",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2018-10-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', 'NSG-01')]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('VNet-01-Prefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('VNet-01-SubnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('VNet-01-SubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', 'NSG-01')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('vm-01NicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'VNet-01')]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicip-01Name'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "10.0.0.4",
+              "subnet": {
+                "id": "[variables('vm-01SubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicip-01Name'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('vm-01Name')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2018-10-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('vm-01NicName'))]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('vm-01VmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('vm-01Name')]",
+          "adminUsername": "[parameters('vm-01AdminUsername')]",
+          "adminPassword": "[parameters('vm-01AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('vm-01ImagePublisher')]",
+            "offer": "[variables('vm-01ImageOffer')]",
+            "sku": "[parameters('vm-01WindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "vm-01OSDisk",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('vm-01NicName'))]"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "Microsoft.Powershell.DSC",
+          "type": "extensions",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2016-03-30",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', parameters('vm-01Name'))]"
+          ],
+          "tags": {
+            "displayName": "vm01config"
+          },
+          "properties": {
+            "publisher": "Microsoft.Powershell",
+            "type": "DSC",
+            "typeHandlerVersion": "2.9",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "configuration": {
+                "url": "[concat(parameters('_artifactsLocation'), '/', variables('DSCconfigArchiveFolder'), '/', variables('vm01configArchiveFileName'))]",
+                "script": "vm01config.ps1",
+                "function": "Main"
+              },
+              "configurationArguments": {
+                "nodeName": "[parameters('vm-01Name')]"
+              }
+            },
+            "protectedSettings": {
+              "configurationUrlSasToken": "[parameters('_artifactsLocationSasToken')]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "[variables('publicip-01Name')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "publicip-01"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('publicip-01DnsName')]"
+        }
+      }
+    }
+  ],
+  "outputs": {}
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "secondResGroupName": {
+      "value": "task8-02-rg"
+    },
+    "vm-01Name": {
+      "value": "vm01"
+    },
+    "vm-02Name": {
+      "value": "vm02"
+    },
+    "vm-01AdminUserName": {
+      "value": "adminuser"
+    },
+    "vm-01AdminPassword": {
+      "value": "A123456789a!"
+    },
+    "vm-02AdminUserName": {
+      "value": "adminuser"
+    },
+    "vm-02AdminPassword": {
+      "value": "A123456789a!"
+    },
+    "publicip-01DnsName": {
+      "value": "ayaztask8-vm01"
+    },
+    "publicip-02DnsName": {
+      "value": "ayaztask8-vm02"
+    }
+  }
+}
